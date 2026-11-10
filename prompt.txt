@@ -1,0 +1,39 @@
+Run this every day. Use your terminal (curl) to make the HTTP requests. Do not use the visual browser.
+Only read data. Never create, edit, or delete anything in Zolato.
+
+CREDENTIALS
+ZOLATO_EMAIL: <YOUREMAIL>
+ZOLATO_PASSWORD: <YOURPASSWORD>
+SUPABASE_ANON_KEY: sb_publishable_0cly_kjtuip_ARZb8RRrWw_8OxT7hsn
+
+STEP 1 – Log in and get a Bearer token
+POST https://zifcbxwslhvlgndyhjia.supabase.co/auth/v1/token?grant_type=password
+Headers:
+apikey: <SUPABASE_ANON_KEY>
+Content-Type: application/json
+Body:
+{"email":"<ZOLATO_EMAIL>","password":"<ZOLATO_PASSWORD>"}
+Save "access_token" from the response as TOKEN.
+If this fails, stop and report the error. Never print the password or the token in your reply.
+
+STEP 2 – Get every customer
+GET https://zolato.ai/api/customers?page=1&limit=50
+Headers:
+Authorization: Bearer TOKEN
+Accept: application/json
+The response is {"customers":[...], "total":N, "page":P, "limit":50}.
+The server returns at most 50 per page. Keep raising page until you have "total" customers
+or a page comes back empty. Keep each customer's id, first_name, last_name,
+business_name, phone, email, and primary customer_addresses entry.
+
+STEP 3 – Get notes for every customer
+For each id:
+GET https://zolato.ai/api/customers/{id}/notes
+(same headers as Step 2)
+If one fails, retry once, then record it under "Errors" and continue.
+If you get HTTP 401, repeat Step 1 for a new token and continue.
+
+STEP 4 – Report
+
+End with: total customers checked (must equal "total") and any errors.
+Only report what's in the API responses. Never invent anything.
