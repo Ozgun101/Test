@@ -1,4 +1,6 @@
-Run this every day. Use your terminal (curl) to make the HTTP requests. Do not use the visual browser.
+Run this every day. Use your terminal with curl.exe (call it as "curl.exe", never "curl",
+because in PowerShell "curl" can be an alias for Invoke-WebRequest). Run the commands from
+PowerShell, not from a .bat file. Do not use the visual browser.
 Only read data. Never create, edit, or delete anything in Zolato.
 
 CREDENTIALS
@@ -6,34 +8,49 @@ ZOLATO_EMAIL: <YOUREMAIL>
 ZOLATO_PASSWORD: <YOURPASSWORD>
 SUPABASE_ANON_KEY: sb_publishable_0cly_kjtuip_ARZb8RRrWw_8OxT7hsn
 
+GENERAL RULES FOR curl.exe
+- Always put URLs in double quotes, because they contain ? and &.
+- Never put JSON or the token directly on the command line. Write them to files and pass
+  the files with "@file".
+- Write every file as UTF-8 without a BOM using [IO.File]::WriteAllText(...).
+  Do not use ">", Out-File or Set-Content, because Windows PowerShell 5.1 adds a BOM or
+  writes UTF-16, which breaks the request.
+- Use: curl.exe -sS ... -o <outfile> -w "%{http_code}"
+  Then read the status code from the output and the response body from <outfile>.
+  Parse JSON with: Get-Content <outfile> -Raw | ConvertFrom-Json
+- If curl.exe fails with CRYPT_E_NO_REVOCATION_CHECK or another revocation error, add
+  --ssl-no-revoke and try again.
+
 STEP 1 – Log in and get a Bearer token
-POST https://zifcbxwslhvlgndyhjia.supabase.co/auth/v1/token?grant_type=password
-Headers:
-apikey: <SUPABASE_ANON_KEY>
-Content-Type: application/json
-Body:
-{"email":"<ZOLATO_EMAIL>","password":"<ZOLATO_PASSWORD>"}
-Save "access_token" from the response as TOKEN.
-If this fails, stop and report the error. Never print the password or the token in your reply.
+Write the login body to login.json:
+  [IO.File]::WriteAllText("$PWD\login.json", '{"email":"<ZOLATO_EMAIL>","password":"<ZOLATO_PASSWORD>"}')
+Then run:
+  curl.exe -sS -X POST "https://zifcbxwslhvlgndyhjia.supabase.co/auth/v1/token?grant_type=password" -H "apikey: <SUPABASE_ANON_KEY>" -H "Content-Type: application/json" --data-binary "@login.json" -o token.json -w "%{http_code}"
+If the status is not 200, stop and report the status and the error message from token.json.
+Otherwise read access_token from token.json and write the headers to auth.txt:
+  $t = (Get-Content token.json -Raw | ConvertFrom-Json).access_token
+  [IO.File]::WriteAllText("$PWD\auth.txt", "Authorization: Bearer $t`nAccept: application/json`n")
+Never print the password or the token in your reply.
 
 STEP 2 – Get every customer
-GET https://zolato.ai/api/customers?page=1&limit=50
-Headers:
-Authorization: Bearer TOKEN
-Accept: application/json
+  curl.exe -sS "https://zolato.ai/api/customers?page=1&limit=50" -H "@auth.txt" -o customers_p1.json -w "%{http_code}"
 The response is {"customers":[...], "total":N, "page":P, "limit":50}.
-The server returns at most 50 per page. Keep raising page until you have "total" customers
-or a page comes back empty. Keep each customer's id, first_name, last_name,
-business_name, phone, email, and primary customer_addresses entry.
+The server returns at most 50 per page. Keep raising page (customers_p2.json, and so on)
+until you have "total" customers or a page comes back empty. Keep each customer's id,
+first_name, last_name, business_name, phone, email, and primary customer_addresses entry.
 
 STEP 3 – Get notes for every customer
 For each id:
-GET https://zolato.ai/api/customers/{id}/notes
-(same headers as Step 2)
+  curl.exe -sS "https://zolato.ai/api/customers/{id}/notes" -H "@auth.txt" -o notes_{id}.json -w "%{http_code}"
 If one fails, retry once, then record it under "Errors" and continue.
-If you get HTTP 401, repeat Step 1 for a new token and continue.
+If you get HTTP 401, repeat Step 1 for a new token (this rewrites auth.txt) and continue.
 
 STEP 4 – Report
 
 End with: total customers checked (must equal "total") and any errors.
 Only report what's in the API responses. Never invent anything.
+
+CLEANUP
+At the end, overwrite login.json, token.json and auth.txt with empty content, since they
+hold the password and the token:
+  [IO.File]::WriteAllText("$PWD\login.json", ""); [IO.File]::WriteAllText("$PWD\token.json", ""); [IO.File]::WriteAllText("$PWD\auth.txt", "")
